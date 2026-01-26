@@ -1,0 +1,22 @@
+{
+    "name": "crymbo-migration",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "node --loader ts-node/esm src/index.ts",
+        "build": "tsc",
+        "start": "node dist/index.js"
+    },
+    "dependencies": {
+        "csv-parse": "5.5.6",
+        "dotenv": "16.4.5",
+        "mysql2": "3.11.0",
+        "otplib": "^13.2.1"
+    },
+    "devDependencies": {
+        "@types/node": "20.11.30",
+        "ts-node": "10.9.2",
+        "typescript": "5.4.5"
+    }
+}

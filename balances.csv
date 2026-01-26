@@ -1,0 +1,4 @@
+merchantEmail,currency,currencyId,currencyType,amount
+merchant7@company.com,USD,1,FIAT,1000
+merchant7@company.com,BTC,3,CRYPTO,0.5
+
