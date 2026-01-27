@@ -2,13 +2,12 @@
 import crypto from "node:crypto";
 import { laravelEncrypt, generateBase32Secret } from "./laravelEncrypt.js";
 
-
 export type CurrencyType = "CRYPTO" | "FIAT";
 export type AllowedRoute = { page: string; inPackage: boolean };
 
 export type CurrencyDbRow = {
   id: number;
-  name: string; // keep ORIGINAL case from DB (usually "BTC", "USD")
+  name: string;
   decimals: number;
   type: CurrencyType;
 };
@@ -74,15 +73,16 @@ export type UserMetaInsert = {
 };
 
 export type DepositInsert = {
-  user_id: number; // merchantId
+  user_id: number;
   from_address: string;
   to_address: string;
-  amount: string; // scaled
+  amount: string;
   system_fee: string;
-  currency: string; // should be "BTC" / "USD"
+  currency: string;
   currency_id: number;
   currency_type: CurrencyType;
   external_transaction_id: string;
+
   type: string;
   is_wc: 0 | 1;
   status: string;
@@ -93,43 +93,43 @@ export type DepositInsert = {
 };
 
 export type BalanceUpsert = {
-  user_id: number; // merchantId
-  amount: string; // scaled
-  currency: string; // "BTC" / "USD"
+  user_id: number;
+  amount: string;
+  currency: string;
   currency_id: number;
   type: CurrencyType;
 };
 
 export type TransactionInsert = {
-  user_id: number; // merchantId
+  user_id: number;
   deposit_id: number;
   type: string;
   transactionId: string;
   status: string;
 
   spend_amount: string;
-  spend_currency: string; // "BTC" / "USD"
+  spend_currency: string;
   spend_currency_id: number;
 
   receive_amount: string;
-  receive_currency: string; // "BTC" / "USD"
+  receive_currency: string;
   receive_currency_id: number;
 
   fee_amount: string;
-  fee_currency: string; // "BTC" / "USD"
+  fee_currency: string;
   fee_currency_id: number;
 };
 
 export type LedgerInsert = {
-  username: string; // merchant email
-  type: string; // deposit
-  currency: string; // "BTC" / "USD"
+  username: string;
+  type: string;
+  currency: string;
   currency_id: number;
-  currency_type: CurrencyType; // CRYPTO / FIAT
-  ticker: string; // MUST be "CRYPTO" or "FIAT" (per your requirement)
-  status: string; // CONFIRMED
+  currency_type: CurrencyType;
+  ticker: string;
+  status: string;
   comment: string;
-  amount: string; // scaled amount (so it is actually recorded)
+  amount: string;
 };
 
 export type MerchantResult = {
@@ -232,10 +232,6 @@ function randHex(bytes: number): string {
   return crypto.randomBytes(bytes).toString("hex");
 }
 
-function randBase64(bytes: number): string {
-  return crypto.randomBytes(bytes).toString("base64");
-}
-
 export function buildUserInsert(emailRaw: string, roleId: number, d: AppDefaults): UserInsert {
   const email = String(emailRaw ?? "").trim().toLowerCase();
   const plain2fa = generateBase32Secret(32);
@@ -260,7 +256,7 @@ export function buildUserInsert(emailRaw: string, roleId: number, d: AppDefaults
       cipher: (process.env.APP_CIPHER as any) || "aes-128-cbc",
       serialize: true
     }),
-    
+
     authenticator_secret_type: "LARAVEL",
 
     two_factor_type: d.twoFactorType,
@@ -329,7 +325,7 @@ export function buildDepositInsert(
     external_transaction_id: externalPaymentId,
     amount: scaledAmount,
     system_fee: d.systemFee,
-    currency: currency.name, // keep uppercase from DB
+    currency: currency.name,
     currency_id: currency.id,
     currency_type: currency.type,
 
@@ -372,11 +368,7 @@ export function buildTransactionInsert(args: {
   };
 }
 
-export function buildBalanceUpsert(
-  merchantId: number,
-  currency: CurrencyDbRow,
-  scaledAmount: string
-): BalanceUpsert {
+export function buildBalanceUpsert(merchantId: number, currency: CurrencyDbRow, scaledAmount: string): BalanceUpsert {
   return {
     user_id: merchantId,
     amount: scaledAmount,
@@ -394,10 +386,10 @@ export function buildLedgerInsert(args: {
   return {
     username: args.merchantEmail,
     type: "deposit",
-    currency: args.currency.name, // uppercase
+    currency: args.currency.name,
     currency_id: args.currency.id,
     currency_type: args.currency.type,
-    ticker: args.currency.type, // REQUIRED: "CRYPTO" or "FIAT"
+    ticker: args.currency.type,
     status: "CONFIRMED",
     comment: "migration balance",
     amount: args.scaledAmount

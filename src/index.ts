@@ -26,12 +26,11 @@ dotenv.config();
 type MerchantRow = { merchantEmail: string };
 type UserRow = { email: string; merchantEmail: string; role: string };
 
-// NEW balances format (no email column)
+// balances format: currencyType removed; currencyId is optional
 type BalanceRow = {
   merchantEmail: string;
   currency: string;
-  currencyId: string;
-  currencyType: CurrencyType;
+  currencyId?: string;
   amount: string;
 };
 
@@ -208,7 +207,7 @@ async function withTx<T>(pool: mysql.Pool, fn: (conn: mysql.PoolConnection) => P
 /* Currencies load and resolve */
 type CurrencyMaps = {
   byId: Map<string, CurrencyDbRow>;
-  byNameType: Map<string, CurrencyDbRow>;
+  byName: Map<string, CurrencyDbRow>; // nameKey -> row (first id if duplicates)
 };
 
 async function loadCurrencies(pool: mysql.Pool): Promise<CurrencyMaps> {
@@ -216,14 +215,12 @@ async function loadCurrencies(pool: mysql.Pool): Promise<CurrencyMaps> {
   const [rows] = await pool.execute<mysql.RowDataPacket[]>(q);
 
   const byId = new Map<string, CurrencyDbRow>();
-  const byNameType = new Map<string, CurrencyDbRow>();
+  const byName = new Map<string, CurrencyDbRow>();
 
   for (const r of rows) {
     const id = Number(r.id);
-
-    const nameRaw = String(r.name ?? "").trim(); // keep case, e.g. "BTC"
-    const nameKey = nameRaw.toLowerCase(); // for matching
-
+    const nameRaw = String(r.name ?? "").trim();
+    const nameKey = nameRaw.toLowerCase();
     const decimals = r.decimals === null || r.decimals === undefined ? 0 : Number(r.decimals);
     const type = normStr(r.type) as CurrencyType;
 
@@ -235,21 +232,26 @@ async function loadCurrencies(pool: mysql.Pool): Promise<CurrencyMaps> {
     };
 
     byId.set(String(id), row);
-    byNameType.set(`${nameKey}|${type}`, row);
+
+    // take first by name, or the lowest id if duplicates
+    const existing = byName.get(nameKey);
+    if (!existing || row.id < existing.id) {
+      byName.set(nameKey, row);
+    }
   }
 
-  return { byId, byNameType };
+  return { byId, byName };
 }
 
 function resolveCurrency(maps: CurrencyMaps, b: BalanceRow): CurrencyDbRow | null {
-  const cid = normStr(b.currencyId);
+  const cid = normStr(b.currencyId ?? "");
   if (cid) {
-    const row = maps.byId.get(cid);
-    if (row) return row;
+    const byId = maps.byId.get(cid);
+    if (byId) return byId;
   }
+
   const codeKey = normStr(b.currency).toLowerCase();
-  const type = normStr(b.currencyType) as CurrencyType;
-  return maps.byNameType.get(`${codeKey}|${type}`) ?? null;
+  return maps.byName.get(codeKey) ?? null;
 }
 
 /* Users in DB */
@@ -418,7 +420,6 @@ async function insertDeposit(conn: mysql.PoolConnection, d: ReturnType<typeof bu
   return Number(res.insertId);
 }
 
-
 async function insertTransaction(conn: mysql.PoolConnection, t: ReturnType<typeof buildTransactionInsert>): Promise<number> {
   const q = `
     INSERT INTO ${qTable(T_TRANSACTIONS)}
@@ -492,19 +493,13 @@ async function insertLedger(ledgerPool: mysql.Pool, schema: LedgerSchema, l: Ret
   if (hasCol(schema, "currency")) add("currency", l.currency);
   if (hasCol(schema, "currency_id")) add("currency_id", l.currency_id);
 
-  // your requirement: ticker should be FIAT/CRYPTO
   if (hasCol(schema, "ticker")) add("ticker", l.ticker);
-
-  // record amount if ledger table supports it
   if (hasCol(schema, "amount")) add("amount", l.amount);
-
-  // if ledger supports currency_type, write it too
   if (hasCol(schema, "currency_type")) add("currency_type", l.currency_type);
 
   if (hasCol(schema, "status")) add("status", l.status);
   if (hasCol(schema, "comment")) add("comment", l.comment);
 
-  // timestamp column naming varies, support both
   if (hasCol(schema, "timestamp")) {
     cols.push("timestamp");
     ph.push("NOW()");
@@ -546,8 +541,7 @@ function groupBalancesByMerchant(rows: BalanceRow[]): Map<string, BalanceRow[]> 
     arr.push({
       merchantEmail,
       currency: normStr((raw as any).currency),
-      currencyId: normStr((raw as any).currencyId),
-      currencyType: normStr((raw as any).currencyType) as CurrencyType,
+      currencyId: normStr((raw as any).currencyId || ""),
       amount: normStr((raw as any).amount)
     });
 
@@ -582,7 +576,6 @@ function aggregateMerchantBalances(args: {
         merchantEmail: args.merchantEmail,
         currency: row.currency,
         currencyId: row.currencyId,
-        currencyType: row.currencyType,
         amount: row.amount
       });
       continue;
@@ -688,7 +681,6 @@ async function main() {
 
     let merchantId: number;
 
-    // A+B+C+D: merchant user, merchant meta, users + user meta
     try {
       await withTx(mainPool, async (conn) => {
         merchantId = await findOrCreateUserId(conn, merchantEmail, defaults.roleIdMerchant);
@@ -732,7 +724,6 @@ async function main() {
 
     merchantId = r.merchantId as number;
 
-    // E: balances (atomic main DB tx), then ledger (separate DB)
     const balanceRows = balancesByMerchant.get(merchantEmail) ?? [];
     if (!balanceRows.length) {
       logInfo({ message: "Merchant done (no balances)", merchantEmail, merchantId });
@@ -768,6 +759,7 @@ async function main() {
 
           const depRow = buildDepositInsert(merchantId, a.currency, scaledAmount, depositDefaults, txIdStr);
           const depositId = await insertDeposit(conn, depRow);
+
           const txRow = buildTransactionInsert({
             merchantId,
             depositId,
@@ -793,7 +785,8 @@ async function main() {
             currencyId: a.currency.id,
             currency: a.currency.name,
             amount: scaledAmount,
-            rowsCount: a.rowsCount
+            rowsCount: a.rowsCount,
+            externalTransactionId: txIdStr
           });
 
           tempTx.push({
@@ -843,7 +836,6 @@ async function main() {
       continue;
     }
 
-    // Ledger writes AFTER commit (separate DB)
     for (const item of ledgerToWrite) {
       const lRow = buildLedgerInsert({
         merchantEmail,
