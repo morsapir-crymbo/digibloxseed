@@ -108,8 +108,8 @@ const defaults: AppDefaults = {
 };
 
 const depositDefaults: DepositDefaults = {
-  fromAddress: envStr("SYSTEM_FROM_ADDRESS", "OLD SYSTEM"),
-  toAddress: envStr("SYSTEM_TO_ADDRESS", "new system"),
+  fromAddress: envStr("SYSTEM_FROM_ADDRESS", "OLD_SYSTEM"),
+  toAddress: envStr("SYSTEM_TO_ADDRESS", "NEW_SYSTEM"),
   systemFee: envStr("DEFAULT_FEE", "0"),
   createdById: envNum("DEFAULT_CREATED_BY_ID", 1)
 };
@@ -381,36 +381,43 @@ async function upsertBalance(conn: mysql.PoolConnection, b: {
 async function insertDeposit(conn: mysql.PoolConnection, d: ReturnType<typeof buildDepositInsert>): Promise<number> {
   const q = `
     INSERT INTO ${qTable(T_DEPOSITS)}
-      (user_id, from_address, to_address, amount, system_fee,
+      (user_id, external_transaction_id, from_address, to_address, amount, system_fee,
        currency, currency_id, currency_type,
        \`type\`, is_wc, status, notification_sent, tx_hash, comment,
        created_by_id, created_at, updated_at)
     VALUES
-      (?, ?, ?, ?, ?,
+      (?, ?, ?, ?, ?, ?,
        ?, ?, ?,
        ?, ?, ?, ?, ?, ?,
        ?, NOW(), NOW())
   `;
+
   const params = [
     d.user_id,
+    d.external_transaction_id,
     d.from_address,
     d.to_address,
     d.amount,
     d.system_fee,
+
     d.currency,
     d.currency_id,
     d.currency_type,
+
     d.type,
     d.is_wc,
     d.status,
     d.notification_sent,
     d.tx_hash,
     d.comment,
+
     d.created_by_id
   ];
+
   const [res] = await conn.execute<mysql.ResultSetHeader>(q, params);
   return Number(res.insertId);
 }
+
 
 async function insertTransaction(conn: mysql.PoolConnection, t: ReturnType<typeof buildTransactionInsert>): Promise<number> {
   const q = `
@@ -757,10 +764,10 @@ async function main() {
         for (const a of perCurrency.values()) {
           const scaledAmount = a.totalScaled.toString();
 
-          const depRow = buildDepositInsert(merchantId, a.currency, scaledAmount, depositDefaults);
-          const depositId = await insertDeposit(conn, depRow);
+          const txIdStr = `mig_${merchantId}_${Date.now()}_${Math.floor(Math.random() * 1e9)}`;
 
-          const txIdStr = `mig_${merchantId}_${depositId}_${Date.now()}`;
+          const depRow = buildDepositInsert(merchantId, a.currency, scaledAmount, depositDefaults, txIdStr);
+          const depositId = await insertDeposit(conn, depRow);
           const txRow = buildTransactionInsert({
             merchantId,
             depositId,

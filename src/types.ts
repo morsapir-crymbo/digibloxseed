@@ -82,7 +82,7 @@ export type DepositInsert = {
   currency: string; // should be "BTC" / "USD"
   currency_id: number;
   currency_type: CurrencyType;
-
+  external_transaction_id: string;
   type: string;
   is_wc: 0 | 1;
   status: string;
@@ -319,12 +319,14 @@ export function buildDepositInsert(
   merchantId: number,
   currency: CurrencyDbRow,
   scaledAmount: string,
-  d: DepositDefaults
+  d: DepositDefaults,
+  externalPaymentId: string
 ): DepositInsert {
   return {
     user_id: merchantId,
     from_address: d.fromAddress,
     to_address: d.toAddress,
+    external_transaction_id: externalPaymentId,
     amount: scaledAmount,
     system_fee: d.systemFee,
     currency: currency.name, // keep uppercase from DB
@@ -333,7 +335,7 @@ export function buildDepositInsert(
 
     type: "AUTO",
     is_wc: 0,
-    status: "SENT_DEPOSIT_ADDRESS",
+    status: "CONFIRMED",
     notification_sent: 0,
     tx_hash: "INTERNAL",
     comment: "balance",
