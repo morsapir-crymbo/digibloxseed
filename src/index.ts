@@ -143,16 +143,33 @@ function writeLog(level: LogLevel, obj: Record<string, unknown>) {
   if (level === "ERROR") appendFileSync(LOG_ERROR, line + "\n");
 }
 
+function fmtCtx(obj: Record<string, unknown>) {
+  const parts: string[] = [];
+
+  const merchantEmail = obj.merchantEmail ? String(obj.merchantEmail) : "";
+  if (merchantEmail) parts.push(`merchant=${merchantEmail}`);
+
+  const merchantId = obj.merchantId !== undefined ? String(obj.merchantId) : "";
+  if (merchantId) parts.push(`id=${merchantId}`);
+
+  return parts.length ? ` [${parts.join(" ")}]` : "";
+}
+
 function logInfo(obj: Record<string, unknown>) {
-  console.log(`[INFO] ${String(obj.message ?? "")}`.trim());
+  const msg = String(obj.message ?? "").trim();
+  console.log(`[INFO]${fmtCtx(obj)} ${msg}`.trim());
   writeLog("INFO", obj);
 }
+
 function logWarn(obj: Record<string, unknown>) {
-  console.log(`[WARN] ${String(obj.message ?? "")}`.trim());
+  const msg = String(obj.message ?? "").trim();
+  console.log(`[WARN]${fmtCtx(obj)} ${msg}`.trim());
   writeLog("WARN", obj);
 }
+
 function logError(obj: Record<string, unknown>) {
-  console.error(`[ERROR] ${String(obj.message ?? "")}`.trim());
+  const msg = String(obj.message ?? "").trim();
+  console.error(`[ERROR]${fmtCtx(obj)} ${msg}`.trim());
   writeLog("ERROR", obj);
 }
 
