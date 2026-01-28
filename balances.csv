@@ -1,4 +1,9 @@
 merchantEmail,currency,amount
-merchant9@company.com,USD,1000
-merchant10@company.com,BTC,0.5
-
+merchant24@company.com,USD,1000
+merchant24@company.com,BTC,0.5
+merchant25@company.com,EUR,1000
+merchant26@company.com,USDC,100
+merchant26@company.com,USD,1234.5
+merchant26@company.com,USDT,1000
+merchant27@company.com,ETH,2.4
+merchant27@company.com,BTC,1.1

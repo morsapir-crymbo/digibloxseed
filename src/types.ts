@@ -228,6 +228,28 @@ export function toScaledAmount(amountStr: string, decimals: number): string {
   return neg ? `-${combined}` : combined;
 }
 
+export function fromScaledAmount(scaledStr: string, decimals: number): string {
+  let s = String(scaledStr ?? "").trim();
+  if (!s) return "0";
+
+  const neg = s.startsWith("-");
+  const raw = neg ? s.slice(1) : s;
+
+  const digits = raw.replace(/^0+(?=\d)/, "") || "0";
+
+  if (decimals <= 0) return neg ? `-${digits}` : digits;
+
+  const padded = digits.padStart(decimals + 1, "0");
+  const intPart = padded.slice(0, -decimals) || "0";
+  const fracPart = padded.slice(-decimals);
+
+  const fracTrimmed = fracPart.replace(/0+$/, "");
+  const out = fracTrimmed ? `${intPart}.${fracTrimmed}` : intPart;
+
+  return neg ? `-${out}` : out;
+}
+
+
 function randHex(bytes: number): string {
   return crypto.randomBytes(bytes).toString("hex");
 }
@@ -333,7 +355,7 @@ export function buildDepositInsert(
     is_wc: 0,
     status: "CONFIRMED",
     notification_sent: 0,
-    tx_hash: "INTERNAL",
+    tx_hash: `INTERNAL_${externalPaymentId}`,
     comment: "balance",
     created_by_id: d.createdById
   };
@@ -347,6 +369,7 @@ export function buildTransactionInsert(args: {
   feeScaled: string;
   transactionId: string;
 }): TransactionInsert {
+  const spendHuman = fromScaledAmount(args.scaledAmount, args.currency.decimals);
   return {
     user_id: args.merchantId,
     deposit_id: args.depositId,
@@ -354,7 +377,7 @@ export function buildTransactionInsert(args: {
     transactionId: args.transactionId,
     status: "PENDING",
 
-    spend_amount: args.scaledAmount,
+    spend_amount: spendHuman,
     spend_currency: args.currency.name,
     spend_currency_id: args.currency.id,
 
